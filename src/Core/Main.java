@@ -1,16 +1,19 @@
 package Core;
 
+import java.io.IOException;
+
 public class Main {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
 
 
         BankingServer server =new BankingServer(5000, 10);
         new Thread(server).start();
-
+        BankingClient client = new BankingClient();
+        client.startClient();
 
         try {
-            Thread.sleep(20 * 1000);
+            Thread.sleep(80 * 1000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
