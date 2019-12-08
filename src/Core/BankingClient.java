@@ -11,15 +11,14 @@ public class BankingClient {
 
         Socket socket = new Socket("127.0.0.1",5000);
         Scanner scanner = new Scanner(System.in);
-        //Scanner in = new Scanner(socket.getInputStream());
+        Scanner in = new Scanner(socket.getInputStream());
         PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 
         while(scanner.hasNextLine()) {
 
             out.println(scanner.nextLine());
+            System.out.println(in.nextLine());
 
-           // System.out.println(in.nextLine());
-            // out.println("HEY");
 
         }
 

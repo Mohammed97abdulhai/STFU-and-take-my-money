@@ -96,13 +96,13 @@ public class BankingServer implements  Runnable{
 
             try {
                 System.out.println("Connected to " + clientSocket.toString());
+
                 Scanner input = new Scanner(clientSocket.getInputStream());
-                //  PrintWriter output = new PrintWriter(clientSocket.getOutputStream());
-                //output.println( "YO ICHIGO SUCK MY Ass");
+                PrintWriter output = new PrintWriter(clientSocket.getOutputStream(),true);
+
                 while(input.hasNextLine() && !Thread.currentThread().isInterrupted()){
 
-                    String s = input.nextLine();
-                    System.out.println(s);
+                    output.println(input.nextLine().toUpperCase());
                 }
 
 
@@ -120,6 +120,8 @@ public class BankingServer implements  Runnable{
                 try {clientSocket.close();
 
                 } catch (IOException e){
+
+                    System.out.println("Error closing Socket");
 
                 }
 
