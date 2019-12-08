@@ -55,7 +55,7 @@ public class BankingServer implements  Runnable{
 
             this.threadPool.execute(new Banker(clientSocket));
         }
-        this.threadPool.shutdown();
+        this.threadPool.shutdownNow();
         System.out.println("BankingServer Stopped");
     }
 
@@ -97,23 +97,37 @@ public class BankingServer implements  Runnable{
             try {
                 System.out.println("Connected to " + clientSocket.toString());
                 Scanner input = new Scanner(clientSocket.getInputStream());
-                PrintWriter output = new PrintWriter(clientSocket.getOutputStream());
-                while(input.hasNextLine()){
+                //  PrintWriter output = new PrintWriter(clientSocket.getOutputStream());
+                //output.println( "YO ICHIGO SUCK MY Ass");
+                while(input.hasNextLine() && !Thread.currentThread().isInterrupted()){
 
                     String s = input.nextLine();
-                    output.println(s + "YO ICHIGO SUCK MY Ass");
-
+                    System.out.println(s);
                 }
-                output.close();
+
+
+                //output.close();
                 input.close();
 
-
+                System.out.println("closed Streams");
 
 
             } catch (IOException e){
 
                 e.printStackTrace();
+            }finally {
+
+                try {clientSocket.close();
+
+                } catch (IOException e){
+
+                }
+
+                System.out.println("Closed" + clientSocket);
+
             }
+
+
 
         }
     }

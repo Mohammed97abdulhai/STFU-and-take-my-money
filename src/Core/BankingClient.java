@@ -6,15 +6,28 @@ import java.net.Socket;
 import java.util.Scanner;
 
 public class BankingClient {
+
     public static void main(String[] args) throws IOException {
+
+        Socket socket = new Socket("127.0.0.1",5000);
+        Scanner scanner = new Scanner(System.in);
+        //Scanner in = new Scanner(socket.getInputStream());
+        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+
+        while(scanner.hasNextLine()) {
+
+            out.println(scanner.nextLine());
+
+           // System.out.println(in.nextLine());
+            // out.println("HEY");
+
+        }
+
+        socket.close();
 
     }
 
     public void startClient() throws IOException {
-        Socket socket = new Socket("127.0.0.1",5000);
-        Scanner in = new Scanner(socket.getInputStream());
-        System.out.println("server response" + in.nextLine());
-        System.out.println(socket.getOutputStream());
 
     }
 }

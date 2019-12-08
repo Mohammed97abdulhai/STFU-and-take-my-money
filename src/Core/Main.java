@@ -9,8 +9,6 @@ public class Main {
 
         BankingServer server =new BankingServer(5000, 10);
         new Thread(server).start();
-        BankingClient client = new BankingClient();
-        client.startClient();
 
         try {
             Thread.sleep(80 * 1000);
