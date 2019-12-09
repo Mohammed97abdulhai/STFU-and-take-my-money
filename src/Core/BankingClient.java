@@ -1,11 +1,14 @@
 package Core;
 
+import messages.Message;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
 
 public class BankingClient {
@@ -17,23 +20,49 @@ public class BankingClient {
 
         socketChannel.configureBlocking(true);
 
-        ByteBuffer buffer = ByteBuffer.allocate(20);
+        Scanner scanner = new Scanner(System.in);
 
-        while(socketChannel.read(buffer)!=-1){
-            buffer.flip();
+        while(scanner.hasNextLine()){
 
-            int value = buffer.getInt();
+            String line = scanner.nextLine();
 
-            buffer.clear();
-            System.out.println(value);
+            if(line.startsWith("ok")){
+
+                ByteBuffer Sendbuffer = Message.TransactionRequest.craft(10 , 20.0 , constructString("hey ichigo"));
+
+
+
+                socketChannel.write(Sendbuffer);
+
+            }
+            else{
+
+                System.out.println("write ok u nigger");
+            }
 
 
         }
 
 
 
+        System.out.println("finished Writing exiting....");
+
+
 
         socketChannel.close();
+
+    }
+    static private byte[] constructString(String string){
+
+        byte[] message= new byte[256];
+
+        byte[] temp = string.getBytes(StandardCharsets.UTF_8);
+
+        for(int i = 0; i < temp.length; i++){
+            message[i] = temp[i];
+        }
+
+        return message;
 
     }
 

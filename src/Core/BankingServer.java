@@ -1,11 +1,14 @@
 package Core;
 
 
+import messages.Message;
+
 import java.net.InetSocketAddress;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.text.ParseException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -18,6 +21,7 @@ public class BankingServer implements  Runnable{
     private   ExecutorService threadPool;
 
     public BankingServer(int port , int numThreads){
+
 
         this.port = port;
         this.threadPool = Executors.newFixedThreadPool(numThreads);
@@ -102,18 +106,22 @@ public class BankingServer implements  Runnable{
 
                this.socketChannel.configureBlocking(true);
 
-                ByteBuffer buf = ByteBuffer.allocate(10);
+                ByteBuffer buf = ByteBuffer.allocate(1024);
 
 
                 while(!Thread.currentThread().isInterrupted()){
 
-                    buf.putInt(50);
+                    socketChannel.read(buf);
+
                     buf.flip();
 
-                    socketChannel.write(buf);
+                    Message.TransactionRequest message = (Message.TransactionRequest) Message.parse(buf);
 
-                    buf.clear();
+                    System.out.println(message.getId());
+                    System.out.println(message.getAmount());
+                    System.out.println(message.getMessage());
 
+                    buf.rewind();
 
                 }
 
@@ -121,7 +129,12 @@ public class BankingServer implements  Runnable{
             } catch (IOException e){
 
                 System.out.println(e.getMessage());
-            }finally {
+            } catch (ParseException e){
+
+                System.out.println(e);
+            }
+
+            finally {
 
                 try {socketChannel.close();
 
