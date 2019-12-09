@@ -26,8 +26,6 @@ public class BankingClient {
 
             buffer.clear();
             System.out.println(value);
-
-
         }
 
 
