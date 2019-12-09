@@ -40,7 +40,8 @@ public class BankingClient {
                 System.out.println("write ok u nigger");
             }
 
-
+            buffer.clear();
+            System.out.println(value);
         }
 
 
