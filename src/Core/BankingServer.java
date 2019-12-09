@@ -13,7 +13,9 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.text.ParseException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -29,8 +31,23 @@ public class BankingServer implements  Runnable{
     public BankingServer(int port , int numThreads) throws FileNotFoundException {
 
 
+
+
+
        clients = new CsvToBeanBuilder(new FileReader("src\\text.csv"))
                 .withType(ClientModel.class).build().parse();
+
+
+
+        Map<Integer , ClientModel> clientMap = new HashMap<>();
+
+        for(ClientModel client : clients){
+
+            clientMap.put(client.getID() ,client);
+        }
+
+        //ClientModel model = clientMap.get(1);
+        //System.out.println(model);
 
 
         this.port = port;
@@ -95,10 +112,29 @@ public class BankingServer implements  Runnable{
 
     }
 
+    private synchronized void handleMessage(Message msg){
+
+        switch(msg.getType()){
+
+            case connectionRequest:
+
+
+
+
+
+
+        }
+
+
+
+
+    }
+
 
     private class Banker implements Runnable{
 
         private SocketChannel socketChannel;
+
 
         public Banker(SocketChannel socketChannel){
 
@@ -107,6 +143,7 @@ public class BankingServer implements  Runnable{
 
 
         }
+
 
         @Override
         public void run() {
@@ -125,11 +162,15 @@ public class BankingServer implements  Runnable{
 
                     buf.flip();
 
-                    Message.TransactionRequest message = (Message.TransactionRequest) Message.parse(buf);
+                    Message message = Message.parse(buf);
+                    if(message instanceof Message.ConnectionRequest){
 
-                    System.out.println(message.getId());
-                    System.out.println(message.getAmount());
-                    System.out.println(message.getMessage());
+                    }
+
+
+                    //System.out.println(message.getId());
+                    //System.out.println(message.getAmount());
+                    //System.out.println(message.getMessage());
 
                     buf.rewind();
 
