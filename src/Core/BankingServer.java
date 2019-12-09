@@ -1,23 +1,21 @@
 package Core;
 
 
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.InetSocketAddress;
 import java.io.IOException;
-import java.util.Scanner;
+import java.nio.ByteBuffer;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class BankingServer implements  Runnable{
 
-    protected int port = 8080;
-    protected  boolean isStopped = false;
+    private int port = 5000;
+    private   boolean isStopped = false;
 
-    protected  ServerSocket serverSocket = null;
-    protected  ExecutorService threadPool  = null;
+    private ServerSocketChannel serverSocketChannel;
+    private   ExecutorService threadPool;
 
     public BankingServer(int port , int numThreads){
 
@@ -32,17 +30,18 @@ public class BankingServer implements  Runnable{
     public void run() {
 
         try {
-            this.serverSocket = new ServerSocket(this.port);
+            this.serverSocketChannel = ServerSocketChannel.open();
+            this.serverSocketChannel.bind(new InetSocketAddress(this.port));
 
         } catch(IOException e){
-            throw new RuntimeException("Cannot open port " + String.valueOf(this.port) , e);
+            throw new RuntimeException("Cannot open port " + this.port , e);
         }
 
         while (!isStopped()) {
-            Socket clientSocket = null;
+            SocketChannel socketChannel;
             try {
 
-                clientSocket = this.serverSocket.accept(); //blocking
+                socketChannel = this.serverSocketChannel.accept();//blocking
 
             } catch (IOException e) {
                 if (isStopped()) {
@@ -53,7 +52,7 @@ public class BankingServer implements  Runnable{
 
             }
 
-            this.threadPool.execute(new Banker(clientSocket));
+            this.threadPool.execute(new Banker(socketChannel));
         }
         this.threadPool.shutdownNow();
         System.out.println("BankingServer Stopped");
@@ -62,6 +61,8 @@ public class BankingServer implements  Runnable{
 
 
     private synchronized boolean isStopped(){
+
+
 
         return this.isStopped;
     }
@@ -72,7 +73,7 @@ public class BankingServer implements  Runnable{
         try{
 
 
-            this.serverSocket.close();
+            this.serverSocketChannel.close();
 
         } catch (IOException e){
             throw new RuntimeException("Error closing server" , e);
@@ -83,11 +84,13 @@ public class BankingServer implements  Runnable{
 
     private class Banker implements Runnable{
 
-        protected  Socket clientSocket= null;
+        private SocketChannel socketChannel;
 
-        public Banker(Socket clientSocket){
+        public Banker(SocketChannel socketChannel){
 
-            this.clientSocket= clientSocket;
+            this.socketChannel= socketChannel;
+
+
 
         }
 
@@ -95,29 +98,32 @@ public class BankingServer implements  Runnable{
         public void run() {
 
             try {
-                System.out.println("Connected to " + clientSocket.toString());
+                System.out.println("Connected to " + socketChannel.toString());
 
-                Scanner input = new Scanner(clientSocket.getInputStream());
-                PrintWriter output = new PrintWriter(clientSocket.getOutputStream(),true);
+               this.socketChannel.configureBlocking(true);
 
-                while(input.hasNextLine() && !Thread.currentThread().isInterrupted()){
+                ByteBuffer buf = ByteBuffer.allocate(10);
 
-                    output.println(input.nextLine().toUpperCase());
+
+                while(!Thread.currentThread().isInterrupted()){
+
+                    buf.putInt(50);
+                    buf.flip();
+
+                    socketChannel.write(buf);
+
+                    buf.clear();
+
+
                 }
-
-
-                //output.close();
-                input.close();
-
-                System.out.println("closed Streams");
 
 
             } catch (IOException e){
 
-                e.printStackTrace();
+                System.out.println(e.getMessage());
             }finally {
 
-                try {clientSocket.close();
+                try {socketChannel.close();
 
                 } catch (IOException e){
 
@@ -125,7 +131,7 @@ public class BankingServer implements  Runnable{
 
                 }
 
-                System.out.println("Closed" + clientSocket);
+                System.out.println("Closed: " + socketChannel);
 
             }
 

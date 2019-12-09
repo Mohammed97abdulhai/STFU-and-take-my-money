@@ -2,31 +2,39 @@ package Core;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
 import java.util.Scanner;
 
 public class BankingClient {
 
     public static void main(String[] args) throws IOException {
 
-        Socket socket = new Socket("127.0.0.1",5000);
-        Scanner scanner = new Scanner(System.in);
-        Scanner in = new Scanner(socket.getInputStream());
-        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+        SocketChannel socketChannel =   SocketChannel.open();
+        socketChannel.connect(new InetSocketAddress("127.0.0.1" , 5000));
 
-        while(scanner.hasNextLine()) {
+        socketChannel.configureBlocking(true);
 
-            out.println(scanner.nextLine());
-            System.out.println(in.nextLine());
+        ByteBuffer buffer = ByteBuffer.allocate(20);
+
+        while(socketChannel.read(buffer)!=-1){
+            buffer.flip();
+
+            int value = buffer.getInt();
+
+            buffer.clear();
+            System.out.println(value);
 
 
         }
 
-        socket.close();
+
+
+
+        socketChannel.close();
 
     }
 
-    public void startClient() throws IOException {
-
-    }
 }

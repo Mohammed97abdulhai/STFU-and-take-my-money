@@ -10,8 +10,9 @@ public class Main {
         BankingServer server =new BankingServer(5000, 10);
         new Thread(server).start();
 
+
         try {
-            Thread.sleep(80 * 1000);
+            Thread.sleep(20 * 1000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
