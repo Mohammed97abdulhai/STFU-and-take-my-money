@@ -29,7 +29,7 @@ public class BankingServer implements  Runnable{
     public BankingServer(int port , int numThreads) throws FileNotFoundException {
 
 
-       clients = new CsvToBeanBuilder(new FileReader("G:\\5th year projects\\CyberSecurity\\src\\text.csv"))
+       clients = new CsvToBeanBuilder(new FileReader("src\\text.csv"))
                 .withType(ClientModel.class).build().parse();
 
 
