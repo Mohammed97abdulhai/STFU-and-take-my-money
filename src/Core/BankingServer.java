@@ -1,14 +1,19 @@
 package Core;
 
 
+import com.opencsv.bean.CsvToBeanBuilder;
 import messages.Message;
+import models.ClientModel;
 
+import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.net.InetSocketAddress;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.text.ParseException;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -19,8 +24,13 @@ public class BankingServer implements  Runnable{
 
     private ServerSocketChannel serverSocketChannel;
     private   ExecutorService threadPool;
+    List<ClientModel> clients;
 
-    public BankingServer(int port , int numThreads){
+    public BankingServer(int port , int numThreads) throws FileNotFoundException {
+
+
+       clients = new CsvToBeanBuilder(new FileReader("G:\\5th year projects\\CyberSecurity\\src\\text.csv"))
+                .withType(ClientModel.class).build().parse();
 
 
         this.port = port;

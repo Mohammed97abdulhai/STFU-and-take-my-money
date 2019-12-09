@@ -24,13 +24,11 @@ public class Main {
 
 
 
-        List<ClientModel> clients = new CsvToBeanBuilder(new FileReader("G:\\5th year projects\\CyberSecurity\\src\\text.csv"))
-                .withType(ClientModel.class).build().parse();
 
-        for (ClientModel clientModel : clients)
+        /*for (ClientModel clientModel : clients)
         {
             System.out.println(clientModel.getID() + " balance:" + clientModel.getBalance());
-        }
+        }*/
 
         BankingServer server =new BankingServer(5000, 10);
         new Thread(server).start();
