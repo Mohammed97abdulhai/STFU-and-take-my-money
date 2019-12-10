@@ -1,6 +1,5 @@
 package messages;
 
-import com.sun.deploy.security.ValidationState;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -19,6 +18,7 @@ public abstract class Message {
         transferResponse( 4),
         balanceRequest(5),
         balanceResponse(6);
+
 
 
         private byte id;
@@ -115,10 +115,6 @@ public abstract class Message {
                 throw new IllegalStateException("the message type isnt defined");
         }
 
-
-
-
-
     }
 
 
@@ -167,7 +163,7 @@ public abstract class Message {
 
     public static class ConnectionResponse extends  Message{
 
-        public static final int BASE_Size = 257;
+        public static final int BASE_Size = 258;
 
         byte flag;
 
@@ -196,7 +192,7 @@ public abstract class Message {
             ByteBuffer buffer = ByteBuffer.allocate(MESSAGE_LENGTH_FIELD_SIZE + ConnectionResponse.BASE_Size);
             buffer.putInt(ConnectionResponse.BASE_Size);
             buffer.put(Type.connectionResponse.getTypeByte());
-            buffer.putInt(id);
+            buffer.put(id);
             buffer.put(message , 0 , 256);
             buffer.flip();
 

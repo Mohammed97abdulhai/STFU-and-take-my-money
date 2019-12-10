@@ -4,6 +4,7 @@ package Core;
 import com.opencsv.bean.CsvToBeanBuilder;
 import messages.Message;
 import models.ClientModel;
+import util.Util;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -76,7 +77,7 @@ public class BankingServer implements  Runnable{
 
             } catch (IOException e) {
                 if (isStopped()) {
-                    System.out.println();
+                    System.out.println("server is stopped u idiot");
                     break;
                 }
                 throw new RuntimeException("Error accepting client connection ", e);
@@ -112,18 +113,19 @@ public class BankingServer implements  Runnable{
 
     }
 
-    private synchronized void handleMessage(Message msg){
+    private synchronized void handleMessage(Message msg , SocketChannel socketChannel){
 
-        switch(msg.getType()){
+       /* switch(msg.getType()){
 
             case connectionRequest:
+                ByteBuffer sendbuffer =
 
 
 
 
 
 
-        }
+        }*/
 
 
 
@@ -134,12 +136,13 @@ public class BankingServer implements  Runnable{
     private class Banker implements Runnable{
 
         private SocketChannel socketChannel;
+        private boolean connected ;
 
 
         public Banker(SocketChannel socketChannel){
 
             this.socketChannel= socketChannel;
-
+            this.connected = false;
 
 
         }
@@ -153,26 +156,45 @@ public class BankingServer implements  Runnable{
 
                this.socketChannel.configureBlocking(true);
 
-                ByteBuffer buf = ByteBuffer.allocate(1024);
+                ByteBuffer readbuff = ByteBuffer.allocate(1024);
+               // ByteBuffer writebuff = ByteBuffer.allocate(1024);
 
 
                 while(!Thread.currentThread().isInterrupted()){
 
-                    socketChannel.read(buf);
+                    socketChannel.read(readbuff);
+                    readbuff.flip();
 
-                    buf.flip();
+                    Message message =  Message.parse(readbuff);
+                    if(!(message instanceof  Message.ConnectionRequest )&& !this.connected){
 
-                    Message message = Message.parse(buf);
-                    if(message instanceof Message.ConnectionRequest){
+                        ByteBuffer writeBuff = Message.ConnectionResponse.craft( (byte)0 , Util.constructString("U Must Be Connected" , 256));
+                        socketChannel.write(writeBuff);
 
                     }
+
+                   // System.out.println(message.getMessage());
+
+                    else {
+
+                        ByteBuffer writeBuff=  Message.ConnectionResponse.craft((byte)1 , Util.constructString("ok message" , 256));
+                        socketChannel.write(writeBuff);
+
+                    }
+
+
+
+                    readbuff.clear();
+
+                    //handleMessage(message);
+
 
 
                     //System.out.println(message.getId());
                     //System.out.println(message.getAmount());
                     //System.out.println(message.getMessage());
 
-                    buf.rewind();
+                    //readbuff.rewind();
 
                 }
 

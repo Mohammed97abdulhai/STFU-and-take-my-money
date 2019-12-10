@@ -1,5 +1,6 @@
 package Core;
 
+import Core.crypto.Cryptography;
 import messages.Message;
 
 import java.io.IOException;
@@ -9,30 +10,95 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
 import java.util.Scanner;
+
+import static util.Util.constructString;
 
 public class BankingClient {
 
     public static void main(String[] args) throws IOException {
 
+        int selfId = 10;
+
+
+        Cryptography.Symmmetric crypt = new Cryptography.Symmmetric(16 , "AES" , "CBC" , "PKCS5PADDING");
+
+
         SocketChannel socketChannel =   SocketChannel.open();
         socketChannel.connect(new InetSocketAddress("127.0.0.1" , 5000));
-
         socketChannel.configureBlocking(true);
 
         Scanner scanner = new Scanner(System.in);
+
+        ByteBuffer readbuff  = ByteBuffer.allocate(1024);
 
         while(scanner.hasNextLine()){
 
             String line = scanner.nextLine();
 
-            if(line.startsWith("ok")){
+            if(line.startsWith("t")){
 
-                ByteBuffer Sendbuffer = Message.TransactionRequest.craft(10 , 20.0 , constructString("hey ichigo"));
-
-
+                ByteBuffer Sendbuffer = Message.TransactionRequest.craft(10 , 20.0 , constructString("hey ichigo",256));
 
                 socketChannel.write(Sendbuffer);
+
+
+
+
+                socketChannel.read(readbuff);
+
+                readbuff.flip();
+
+
+                try {
+                    Message.ConnectionResponse msg = (Message.ConnectionResponse) Message.parse(readbuff);
+
+                    System.out.println(msg.getMessage());
+
+
+
+                }catch (ParseException e){
+                    System.out.println(e);
+                }
+
+
+                readbuff.clear();
+
+
+
+            }
+            else if(line.startsWith("c")){
+
+
+
+                ByteBuffer Sendbuffer = Message.ConnectionRequest.craft(selfId);
+
+                socketChannel.write(Sendbuffer);
+
+
+
+
+                socketChannel.read(readbuff);
+
+                readbuff.flip();
+
+
+                try {
+                    Message.ConnectionResponse msg = (Message.ConnectionResponse) Message.parse(readbuff);
+
+                    System.out.println(msg.getMessage());
+
+
+
+                }catch (ParseException e){
+                    System.out.println(e);
+                }
+
+
+                readbuff.clear();
+
+
 
             }
             else{
@@ -50,18 +116,6 @@ public class BankingClient {
         socketChannel.close();
 
     }
-    static private byte[] constructString(String string){
 
-        byte[] message= new byte[256];
-
-        byte[] temp = string.getBytes(StandardCharsets.UTF_8);
-
-        for(int i = 0; i < temp.length; i++){
-            message[i] = temp[i];
-        }
-
-        return message;
-
-    }
 
 }
