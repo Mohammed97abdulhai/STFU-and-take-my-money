@@ -19,7 +19,7 @@ public class BankingClient {
 
     public static void main(String[] args) throws IOException {
 
-        int selfId = 10;
+        int selfId = 12;
 
 
         Cryptography.Symmmetric crypt = new Cryptography.Symmmetric(16 , "AES" , "CBC" , "PKCS5PADDING");
@@ -39,7 +39,7 @@ public class BankingClient {
 
             if(line.startsWith("t")){
 
-                ByteBuffer Sendbuffer = Message.TransactionRequest.craft(10 , 20.0 , constructString("hey ichigo",256));
+                ByteBuffer Sendbuffer = Message.TransactionRequest.craft(20 , 20.0 , constructString("hey ichigo",256));
 
                 socketChannel.write(Sendbuffer);
 
@@ -52,7 +52,7 @@ public class BankingClient {
 
 
                 try {
-                    Message.ConnectionResponse msg = (Message.ConnectionResponse) Message.parse(readbuff);
+                    Message.TransactionResponse msg = (Message.TransactionResponse) Message.parse(readbuff);
 
                     System.out.println(msg.getMessage());
 

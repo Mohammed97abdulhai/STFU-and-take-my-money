@@ -27,7 +27,8 @@ public class BankingServer implements  Runnable{
 
     private ServerSocketChannel serverSocketChannel;
     private   ExecutorService threadPool;
-    List<ClientModel> clients;
+    private List<ClientModel> clients;
+    private Map<Integer , ClientModel> clientModelMap;
 
     public BankingServer(int port , int numThreads) throws FileNotFoundException {
 
@@ -40,11 +41,11 @@ public class BankingServer implements  Runnable{
 
 
 
-        Map<Integer , ClientModel> clientMap = new HashMap<>();
+        clientModelMap = new HashMap<>();
 
         for(ClientModel client : clients){
 
-            clientMap.put(client.getID() ,client);
+            clientModelMap.put(client.getID() ,client);
         }
 
         //ClientModel model = clientMap.get(1);
@@ -113,6 +114,20 @@ public class BankingServer implements  Runnable{
 
     }
 
+
+    private synchronized boolean userInServer(int id){
+
+        return clientModelMap.containsKey(id);
+
+    }
+
+    private synchronized  boolean userHasEnoughMoney(double amount , int id){
+
+
+        return false;
+
+
+    }
     private synchronized void handleMessage(Message msg , SocketChannel socketChannel){
 
        /* switch(msg.getType()){
@@ -138,6 +153,8 @@ public class BankingServer implements  Runnable{
         private SocketChannel socketChannel;
         private boolean connected ;
 
+        private int id;
+
 
         public Banker(SocketChannel socketChannel){
 
@@ -157,7 +174,10 @@ public class BankingServer implements  Runnable{
                this.socketChannel.configureBlocking(true);
 
                 ByteBuffer readbuff = ByteBuffer.allocate(1024);
-               // ByteBuffer writebuff = ByteBuffer.allocate(1024);
+                String reason;
+                byte flag;
+
+                // ByteBuffer writebuff = ByteBuffer.allocate(1024);
 
 
                 while(!Thread.currentThread().isInterrupted()){
@@ -166,9 +186,14 @@ public class BankingServer implements  Runnable{
                     readbuff.flip();
 
                     Message message =  Message.parse(readbuff);
+
                     if(!(message instanceof  Message.ConnectionRequest )&& !this.connected){
 
-                        ByteBuffer writeBuff = Message.ConnectionResponse.craft( (byte)0 , Util.constructString("U Must Be Connected" , 256));
+                        reason = "U Must Be Connected.... Try Again";
+                        flag = 1;
+
+
+                        ByteBuffer writeBuff = Message.ConnectionResponse.craft( flag , Util.constructString(reason , 256));
                         socketChannel.write(writeBuff);
 
                     }
@@ -177,8 +202,98 @@ public class BankingServer implements  Runnable{
 
                     else {
 
-                        ByteBuffer writeBuff=  Message.ConnectionResponse.craft((byte)1 , Util.constructString("ok message" , 256));
-                        socketChannel.write(writeBuff);
+                        switch (message.getType()){
+
+                            case connectionRequest:
+
+
+                                Message.ConnectionRequest cMessage= (Message.ConnectionRequest)message;
+
+                                if(userInServer((cMessage).getId())){
+                                    reason = "Connected!";
+
+                                    flag = 0;
+
+                                    ByteBuffer writeBuff=  Message.ConnectionResponse.craft(flag, Util.constructString(reason , 256));
+                                    socketChannel.write(writeBuff);
+
+                                    this.connected = true;
+                                    this.id = cMessage.getId();
+
+                                }
+                                else{
+
+                                    reason = "U are Not  A user in this bank......";
+                                    flag = 1;
+
+                                    ByteBuffer writeBuff=  Message.ConnectionResponse.craft(flag , Util.constructString(reason , 256));
+                                    socketChannel.write(writeBuff);
+
+                                    this.connected = false;
+
+
+                                }
+
+
+                                break;
+
+
+
+                            case transferRequest:
+
+                                System.out.println("yooooo");
+
+
+                                Message.TransactionRequest tMessage= (Message.TransactionRequest)message;
+
+                                if(userInServer(tMessage.getId())){
+
+                                    reason = "the User U wish to transfer Money to doesn't exist in our service currently! maybe stop sending money to ur imaginary friends";
+                                    flag = 1;
+
+                                    ByteBuffer writeBuff=  Message.TransactionResponse.craft(flag , Util.constructString(reason , 256));
+                                    socketChannel.write(writeBuff);
+
+
+
+                                }
+                                else{
+
+                                    if(userHasEnoughMoney(tMessage.getAmount() , this.id) ){
+
+                                        reason = "Money trasnferred";
+                                        flag = 0;
+
+                                        ByteBuffer writeBuff=  Message.TransactionResponse.craft(flag , Util.constructString(reason , 256));
+                                        socketChannel.write(writeBuff);
+
+
+
+                                    }
+
+                                    else{
+
+                                        reason = "you are broke dude";
+                                        flag = 0;
+
+
+                                        ByteBuffer writeBuff=  Message.TransactionResponse.craft(flag , Util.constructString(reason , 256));
+                                        socketChannel.write(writeBuff);
+
+
+                                    }
+
+                                }
+
+                                break;
+
+
+
+
+
+                        }
+
+
 
                     }
 
