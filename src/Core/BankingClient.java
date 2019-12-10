@@ -19,7 +19,7 @@ public class BankingClient {
 
     public static void main(String[] args) throws IOException {
 
-        int selfId = 12;
+        int selfId = 1;
 
 
         Cryptography.Symmmetric crypt = new Cryptography.Symmmetric(16 , "AES" , "CBC" , "PKCS5PADDING");
@@ -52,9 +52,7 @@ public class BankingClient {
 
 
                 try {
-                    Message.TransactionResponse msg = (Message.TransactionResponse) Message.parse(readbuff);
-
-                    System.out.println(msg.getMessage());
+                    handleGeneralMessage(Message.parse(readbuff));
 
 
 
@@ -114,6 +112,28 @@ public class BankingClient {
 
 
         socketChannel.close();
+
+    }
+
+
+    private static void handleGeneralMessage(Message message){
+        switch (message.getType()){
+
+            case connectionResponse:
+                Message.ConnectionResponse cMessage = (Message.ConnectionResponse)message;
+                System.out.println(cMessage.getMessage());
+                break;
+
+
+            case transferResponse:
+                Message.TransactionResponse tMessage = (Message.TransactionResponse)message;
+                System.out.println(tMessage.getMessage());
+                break;
+
+
+
+        }
+
 
     }
 

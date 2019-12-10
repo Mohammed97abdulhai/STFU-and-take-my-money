@@ -198,9 +198,21 @@ public class BankingServer implements  Runnable{
 
                     }
 
+                    else if(message instanceof  Message.ConnectionRequest && this.connected){
+
+                        reason = "you are already connected";
+                        flag = 1;
+
+
+                        ByteBuffer writeBuff = Message.ConnectionResponse.craft( flag , Util.constructString(reason , 256));
+                        socketChannel.write(writeBuff);
+
+                    }
+
                    // System.out.println(message.getMessage());
 
                     else {
+                        System.out.println("inside else");
 
                         switch (message.getType()){
 
