@@ -1,6 +1,5 @@
 package Core;
 
-import Core.crypto.Cryptography;
 import messages.Message;
 import util.Util;
 
@@ -108,7 +107,7 @@ public class Main {
 
 
         try {
-            Thread.sleep(100 * 1000);
+            Thread.sleep(60 * 1000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
