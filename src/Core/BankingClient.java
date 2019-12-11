@@ -107,13 +107,6 @@ public class BankingClient {
                 Message.TransactionResponse msg = (Message.TransactionResponse) message;
                 byte flag = msg.getFlag();
 
-                if(flag == 0){
-                    System.out.println("Successful transaction");
-                }
-                else{
-                    System.out.println("Failed transaction");
-                }
-
                 int lastIndex = msg.getMessage().indexOf(0);
                 String responseMessage = msg.getMessage().substring(0, lastIndex);
                 System.out.println(responseMessage);
@@ -195,28 +188,6 @@ public class BankingClient {
         System.out.println("finished Writing exiting....");
 
         socketChannel.close();
-    }
-
-
-    private static void handleGeneralMessage(Message message){
-        switch (message.getType()){
-
-            case connectionResponse:
-                Message.ConnectionResponse cMessage = (Message.ConnectionResponse)message;
-                System.out.println(cMessage.getMessage());
-                break;
-
-
-            case transferResponse:
-                Message.TransactionResponse tMessage = (Message.TransactionResponse)message;
-                System.out.println(tMessage.getMessage());
-                break;
-
-
-
-        }
-
-
     }
 
 
