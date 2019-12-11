@@ -36,6 +36,7 @@ public class BankingServer implements  Runnable{
 
     private ServerSocketChannel serverSocketChannel;
     private   ExecutorService threadPool;
+
     List<ClientModel> clients;
     Map<Integer , ClientModel> clientMap = new HashMap<>();
 
@@ -45,7 +46,7 @@ public class BankingServer implements  Runnable{
 
         for(ClientModel client : clients){
 
-            clientMap.put(client.getID() ,client);
+            clientModelMap.put(client.getID() ,client);
         }
 
         //ClientModel model = clientMap.get(1);
@@ -113,6 +114,20 @@ public class BankingServer implements  Runnable{
         saveDatabase();
     }
 
+
+    private synchronized boolean userInServer(int id){
+
+        return clientModelMap.containsKey(id);
+
+    }
+
+    private synchronized  boolean userHasEnoughMoney(double amount , int id){
+
+
+        return false;
+
+
+    }
     private synchronized void handleMessage(Message msg , SocketChannel socketChannel){
 
        /* switch(msg.getType()){
@@ -169,6 +184,8 @@ public class BankingServer implements  Runnable{
         private byte[] secretKey;
 
 
+        private int id;
+
 
         public Banker(SocketChannel socketChannel){
 
@@ -204,7 +221,10 @@ public class BankingServer implements  Runnable{
                 this.socketChannel.configureBlocking(true);
 
                 ByteBuffer readbuff = ByteBuffer.allocate(1024);
-               // ByteBuffer writebuff = ByteBuffer.allocate(1024);
+                String reason;
+                byte flag;
+
+                // ByteBuffer writebuff = ByteBuffer.allocate(1024);
 
 
                 while(!Thread.currentThread().isInterrupted()){

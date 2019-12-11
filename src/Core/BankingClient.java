@@ -198,4 +198,26 @@ public class BankingClient {
     }
 
 
+    private static void handleGeneralMessage(Message message){
+        switch (message.getType()){
+
+            case connectionResponse:
+                Message.ConnectionResponse cMessage = (Message.ConnectionResponse)message;
+                System.out.println(cMessage.getMessage());
+                break;
+
+
+            case transferResponse:
+                Message.TransactionResponse tMessage = (Message.TransactionResponse)message;
+                System.out.println(tMessage.getMessage());
+                break;
+
+
+
+        }
+
+
+    }
+
+
 }
