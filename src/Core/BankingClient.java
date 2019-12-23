@@ -41,7 +41,7 @@ public class BankingClient {
         PrivateKey privateKey;
 
 
-        PublicKey remotePublickey;
+        PublicKey remotePublickey = null;
 
 
         // byte[] secretKey = null;
@@ -62,8 +62,6 @@ public class BankingClient {
 
         //getting the bytes from the public key to be sent across the network
         pukeyBytes = publicKey.getEncoded();
-       // System.out.println(pukeyBytes.length);
-        System.out.println(new String(pukeyBytes , StandardCharsets.UTF_8));
 
 
         Scanner scanner = new Scanner(System.in);
@@ -109,7 +107,6 @@ public class BankingClient {
                                     KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(handshake.getPublicKey()));
                         }
 
-                        System.out.println(new String (handshake.getPublicKey() , StandardCharsets.UTF_8));
 
                         //print the message
                         int lastIndex = handshake.getMessage().indexOf(0);
@@ -122,7 +119,6 @@ public class BankingClient {
                     }while(handshake.getFlag() == 1);
 
 
-                    System.out.println("Connected!!");
 
 
 
@@ -155,23 +151,53 @@ public class BankingClient {
                         //send a transaction request to the user
                         ByteBuffer Sendbuff = Message.TransactionRequest.craft(receiverId , amount , constructString(reason,256));
 
+
+                        // get the message and the signature
                         byte[] message = Sendbuff.array();
-                        System.out.println(new String(message , StandardCharsets.UTF_8));
                         byte[] signature= Symmetric.sign(message , privateKey);
 
 
-                        //concat the two messagaes to send
-                        byte[] messageWithSignature = new byte[message.length + signature.length];
-                        System.arraycopy(signature , 0  , messageWithSignature, 0 , signature.length);
+
+                        //generate the session key
+                        SecureRandom secureRandom = new SecureRandom();
+
+                        byte[] key = new byte[16];
+                        secureRandom.nextBytes(key);
+
+
+                        byte[] encryptedKey = Asymmetric.encrypt(key , remotePublickey.getEncoded());
+
+
+                        //for testing currently
+                        byte[] messageWithSignature = new byte[signature.length + message.length];
+                        System.arraycopy(signature , 0 , messageWithSignature , 0 , signature.length);
                         System.arraycopy(message , 0 , messageWithSignature , signature.length , message.length);
 
+                        byte[] messageWithSignatureEncrypted = Symmetric.encrypt(messageWithSignature , key , Symmetric.iv);
+
+                        System.out.println(messageWithSignatureEncrypted.length);
+
+                        //testing ends
 
 
-                        System.out.println(signature.length);
+
+
+                        //concat the two messages to send
+                        byte[] fullMessage = new byte[ encryptedKey.length + messageWithSignatureEncrypted.length ];
+                        System.arraycopy(encryptedKey , 0 , fullMessage , 0 , encryptedKey.length);
+                        System.arraycopy(messageWithSignatureEncrypted , 0 , fullMessage , encryptedKey.length , messageWithSignatureEncrypted.length);
+
+                       /* System.arraycopy(encryptedKey , 0 , messageWithSignature , 0 , encryptedKey.length);
+                        System.arraycopy(signature , 0  , messageWithSignature, encryptedKey.length , signature.length);
+                        System.arraycopy(message , 0 , messageWithSignature , encryptedKey.length + signature.length , message.length);*/
 
 
 
-                        socketChannel.write(ByteBuffer.wrap(messageWithSignature));
+
+
+
+
+                        socketChannel.write(ByteBuffer.wrap(fullMessage));
 
 
 

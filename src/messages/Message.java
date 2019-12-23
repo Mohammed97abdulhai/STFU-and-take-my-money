@@ -282,12 +282,16 @@ public abstract class Message {
 
         byte[] reason; // the message explaining why we want to transfer money to that person
 
+        byte[] message;
 
-        private TransactionRequest(ByteBuffer buffer,int id, byte [] message, double moneyAmount){
+        private TransactionRequest(ByteBuffer buffer,int id, byte [] message, double moneyAmount /*, byte[] bytesMessage*/){
             super(Type.transferRequest , buffer);
             this.id = id;
             this.reason = message;
             this.moneyAmount = moneyAmount;
+/*
+            this.message = bytesMessage;
+*/
 
         }
 
@@ -297,7 +301,11 @@ public abstract class Message {
             int id = buffer.getInt();
             double amount = buffer.getDouble();
             buffer.get(message , 0 , message.length);
-            return  new TransactionRequest(buffer , id,message,amount );
+
+           /* buffer.rewind();
+            byte[] data = new byte[TransactionRequest.BASE_Size + TransactionRequest.MESSAGE_LENGTH_FIELD_SIZE];
+            buffer.get(data , 0 , data.length);*/
+            return  new TransactionRequest(buffer , id,message,amount/* ,data*/);
 
         }
 
@@ -327,6 +335,11 @@ public abstract class Message {
         public int getId(){
             return this.id;
 
+        }
+
+        public byte[] get_message(){
+
+                return this.message;
         }
 
     }

@@ -191,8 +191,6 @@ public class BankingServer implements  Runnable{
 
                 this.pkeyBytes = this.publicKey.getEncoded();
 
-                //System.out.println(this.pkeyBytes.length);
-                System.out.println(new String(this.pkeyBytes , StandardCharsets.UTF_8));
 
             } catch (NoSuchAlgorithmException e) {
                 e.printStackTrace();
@@ -230,7 +228,6 @@ public class BankingServer implements  Runnable{
 
                     int id = handshake.getId();
 
-                    System.out.println(new String(handshake.getPublicKey() , StandardCharsets.UTF_8));
 
                     if(clientMap.containsKey(id)){
                         this.connected = true;
@@ -274,20 +271,49 @@ public class BankingServer implements  Runnable{
                     readbuff.flip();
 
 
+                    //read the encrypted session key
+                    byte[] encryptedSessionKey = new byte[128];
+                    readbuff.get(encryptedSessionKey , 0 , encryptedSessionKey.length);
+
+                    //decrypt it
+                    byte[] sessionKey = Asymmetric.decrypt(encryptedSessionKey , this.privateKey);
+
+
+
+
+                    //read the encrypted message + signature
+                    byte[] messagePlusSignatureEncrypted = new byte[readbuff.remaining()];
+                    readbuff.get(messagePlusSignatureEncrypted , 0 , messagePlusSignatureEncrypted.length);
+
+                    //decrypt it
+                    byte[] messagePlusSignature = Symmetric.decrypt(messagePlusSignatureEncrypted , sessionKey , Symmetric.iv);
+
+                    //readbuff.get(signature , 0 , signature.length);
+
+
+                    //split the array into signature and message
                     byte[] signature = new byte[128];
-                    readbuff.get(signature , 0 , signature.length);
+                    byte[] message = new byte[messagePlusSignature.length - 128];
+
+                    System.arraycopy(messagePlusSignature , 0 , signature , 0 , signature.length);
+                    System.arraycopy(messagePlusSignature , signature.length ,message , 0 , message.length );
 
 
-                    transactionRequest = (Message.TransactionRequest)Message.parse(readbuff.slice());
 
-                    System.out.println(new String(transactionRequest.getData().array() , StandardCharsets.UTF_8));
+                   /* ByteBuffer temp = readbuff.slice();
+                    byte[] m = new byte[temp.remaining()];
 
-                   boolean verfied =  Symmetric.verify(transactionRequest.getData().array() , signature , this.remotePublickey);
+                    temp.get(m);
+                    temp.rewind();*/
+
+                    transactionRequest = (Message.TransactionRequest)Message.parse(ByteBuffer.wrap(message));
+
+
+                   boolean verfied =  Symmetric.verify(message , signature , this.remotePublickey);
 
                    if(verfied){
                        System.out.println("VERFIED");
                    }
-
 
                     ByteBuffer writeBuff = null;
 
