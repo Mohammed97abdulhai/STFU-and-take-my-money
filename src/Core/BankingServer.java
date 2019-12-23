@@ -4,7 +4,6 @@ package Core;
 import Core.crypto.Asymmetric;
 import Core.crypto.Symmetric;
 import com.opencsv.bean.CsvToBeanBuilder;
-import com.opencsv.bean.StatefulBeanToCsvBuilder;
 import messages.Message;
 import models.ClientModel;
 import util.Util;
@@ -20,14 +19,19 @@ import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.X509EncodedKeySpec;
 import java.text.ParseException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+
 
 public class BankingServer implements  Runnable{
 
@@ -155,7 +159,8 @@ public class BankingServer implements  Runnable{
     private class Banker implements Runnable{
 
         private SocketChannel socketChannel;
-        private boolean connected ;
+        private boolean connected  = false;
+        private boolean validTransaction = false;
         private int userId = 0;
         private boolean cipherMode = false;
         private boolean handshakeReceived = false;
@@ -163,6 +168,8 @@ public class BankingServer implements  Runnable{
 
         private PublicKey publicKey;
         private PrivateKey privateKey;
+
+        private PublicKey remotePublickey;
 
         private byte[] pkeyBytes;
 
@@ -184,6 +191,9 @@ public class BankingServer implements  Runnable{
 
                 this.pkeyBytes = this.publicKey.getEncoded();
 
+                //System.out.println(this.pkeyBytes.length);
+                System.out.println(new String(this.pkeyBytes , StandardCharsets.UTF_8));
+
             } catch (NoSuchAlgorithmException e) {
                 e.printStackTrace();
             }
@@ -202,112 +212,122 @@ public class BankingServer implements  Runnable{
                 System.out.println("Connected to " + socketChannel.toString());
 
                 this.socketChannel.configureBlocking(true);
-
                 ByteBuffer readbuff = ByteBuffer.allocate(1024);
-                // ByteBuffer writebuff = ByteBuffer.allocate(1024);
+
+                Message.ConnectionRequest handshake= null;
 
 
-                while(!Thread.currentThread().isInterrupted()){
+                //1) handle connection request and connection response
+
+
+                do{
+                    socketChannel.read(readbuff);
+                    readbuff.flip();
+
+                    handshake = (Message.ConnectionRequest) Message.parse(readbuff);
+
+                    ByteBuffer writeBuff = null;
+
+                    int id = handshake.getId();
+
+                    System.out.println(new String(handshake.getPublicKey() , StandardCharsets.UTF_8));
+
+                    if(clientMap.containsKey(id)){
+                        this.connected = true;
+                        this.userId = id;
+
+
+                        //read the publickey bytes and create a PublicKey object from it
+
+                        this.remotePublickey =
+                                KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(handshake.getPublicKey()));
+
+
+
+
+
+                        writeBuff = Message.ConnectionResponse.craft((byte)0, Util.constructString("Successfully established connection to user " + id, 256), pkeyBytes);
+                    }
+                    else{
+                        writeBuff = Message.ConnectionResponse.craft((byte)1, Util.constructString("failed to establish connection to user " + id, 256), pkeyBytes);
+                    }
+
+                    this.socketChannel.write(writeBuff);
+
+                    readbuff.clear();
+
+                }while(!this.connected );
+
+
+
+
+
+                //2) handle transfer request and response
+
+                Message.TransactionRequest transactionRequest = null;
+
+                do{
+
+
 
                     socketChannel.read(readbuff);
                     readbuff.flip();
 
-                    Message message = null;
 
-                    if(cipherMode){
-                        //Handle any message after the key exchange
-                        byte[] cipherText = new byte[readbuff.remaining()];
-                        readbuff.get(cipherText);
-                        byte[] plainText = Symmetric.decrypt(cipherText, secretKey, Symmetric.iv);
-                        message = Message.parse(ByteBuffer.wrap(plainText));
-                    }
-                    else if(handshakeReceived){
-                        //Handle the key exchange message
-                        byte[] cipherText = new byte[readbuff.remaining()];
-                        readbuff.get(cipherText);
-                        byte[] plainText = Asymmetric.decrypt(cipherText, privateKey);
-                        message = Message.parse(ByteBuffer.wrap(plainText));
-                    }
-                    else{
-                        //Handle the connection request
-                        message =  Message.parse(readbuff);
-                    }
+                    byte[] signature = new byte[128];
+                    readbuff.get(signature , 0 , signature.length);
+
+
+                    transactionRequest = (Message.TransactionRequest)Message.parse(readbuff.slice());
+
+                    System.out.println(new String(transactionRequest.getData().array() , StandardCharsets.UTF_8));
+
+                   boolean verfied =  Symmetric.verify(transactionRequest.getData().array() , signature , this.remotePublickey);
+
+                   if(verfied){
+                       System.out.println("VERFIED");
+                   }
+
 
                     ByteBuffer writeBuff = null;
 
-                    if(message instanceof Message.KeyExchange){
-                        Message.KeyExchange realMessage = (Message.KeyExchange)message;
 
-                        this.secretKey = realMessage.getSecretKey();
+                    int id = transactionRequest.getId();
+                    double amount = transactionRequest.getAmount();
+                    String reason = transactionRequest.getMessage();
 
-                        cipherMode = true;
-                    }
-                    //Transaction request before connection
-                    else if(!(message instanceof  Message.ConnectionRequest ) && !this.connected){
-                        writeBuff = Message.TransactionResponse.craft( (byte)1 , Util.constructString("U Must Be Connected to perform a transaction" , 256));
-                    }
-                    //Connection request before connection
-                    else if((message instanceof Message.ConnectionRequest) && !this.connected){
-                        int id = ((Message.ConnectionRequest)message).getId();
-                        if(clientMap.containsKey(id)){
-                            this.connected = true;
-                            this.userId = id;
+                    if(clientMap.containsKey(id)){
+                        ClientModel sender = clientMap.get(userId);
+                        double currentBalance = sender.getBalance();
 
-                            writeBuff = Message.ConnectionResponse.craft((byte)0, Util.constructString("Successfully established connection to user " + id, 256), pkeyBytes);
-                            handshakeReceived = true;
+                        ClientModel receiver = clientMap.get(id);
+                        double receiverBalance = receiver.getBalance();
+
+                        if(currentBalance > amount) {
+                            writeBuff = Message.TransactionResponse.craft((byte)0 , Util.constructString("Transaction successful. new balance : " + (currentBalance - amount) , 256));
+                            clientMap.get(userId).setBalance(String.valueOf(currentBalance - amount));
+                            clientMap.get(id).setBalance(String.valueOf(receiverBalance + amount));
+                            validTransaction = true;
                         }
                         else{
-                            writeBuff = Message.ConnectionResponse.craft((byte)1, Util.constructString("failed to establish connection to user " + id, 256), pkeyBytes);
+                            writeBuff = Message.TransactionResponse.craft((byte)1 , Util.constructString("Insufficient funds" , 256));
                         }
+
                     }
-                    //Connection request after connection
-                    else if((message instanceof Message.ConnectionRequest) && this.connected){
-                        writeBuff = Message.ConnectionResponse.craft((byte)1, Util.constructString("Banker Already Connected", 256), pkeyBytes);
-                    }
-                    //Transaction request after connection
-                    else {
-                        Message.TransactionRequest realMessage = (Message.TransactionRequest)message;
-
-                        int id = realMessage.getId();
-                        double amount = realMessage.getAmount();
-                        String reason = realMessage.getMessage();
-
-                        if(clientMap.containsKey(id)){
-                            ClientModel sender = clientMap.get(userId);
-                            double currentBalance = sender.getBalance();
-
-                            ClientModel receiver = clientMap.get(id);
-                            double receiverBalance = receiver.getBalance();
-
-                            if(currentBalance > amount) {
-                                writeBuff = Message.TransactionResponse.craft((byte)0 , Util.constructString("Transaction successful. new balance : " + (currentBalance - amount) , 256));
-                                clientMap.get(userId).setBalance(String.valueOf(currentBalance - amount));
-                                clientMap.get(id).setBalance(String.valueOf(receiverBalance + amount));
-                            }
-                            else{
-                                writeBuff = Message.TransactionResponse.craft((byte)1 , Util.constructString("Insufficient funds" , 256));
-                            }
-
-                        }
-                        else{
-                            writeBuff = Message.TransactionResponse.craft((byte)1 , Util.constructString("User : " + id + " does not exist"  , 256));
-                        }
+                    else{
+                        writeBuff = Message.TransactionResponse.craft((byte)1 , Util.constructString("User : " + id + " does not exist"  , 256));
                     }
 
-                    if(writeBuff != null){
-                        if(cipherMode){
-                            byte[] plainText = writeBuff.array();
-                            byte[] cipherText = Symmetric.encrypt(plainText, secretKey, Symmetric.iv);
-                            socketChannel.write(ByteBuffer.wrap(cipherText));
-                        }
-                        else{
-                            socketChannel.write(writeBuff);
-                        }
-                    }
 
+                    this.socketChannel.write(writeBuff);
                     readbuff.clear();
 
-                }
+
+                }while(!validTransaction);
+
+
+
+
 
 
             }
@@ -321,8 +341,15 @@ public class BankingServer implements  Runnable{
             catch (BufferUnderflowException e){
                 System.out.println("Buffer Error caused by interruption");
                 //System.out.println(e.getMessage());
-            }
-            finally {
+            } catch (NoSuchAlgorithmException e) {
+                e.printStackTrace();
+            } catch (InvalidKeySpecException e) {
+                e.printStackTrace();
+            } catch (InvalidKeyException e) {
+                e.printStackTrace();
+            } catch (SignatureException e) {
+                e.printStackTrace();
+            } finally {
 
                 try {socketChannel.close();
 

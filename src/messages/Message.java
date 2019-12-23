@@ -104,7 +104,7 @@ public abstract class Message {
 
         switch (type){
             case  connectionRequest:
-                return ConnectionRequest.parse(buffer.slice());
+                return ConnectionRequest.parse(buffer.slice() , length);
 
             case connectionResponse:
                 return ConnectionResponse.parse(buffer.slice(), length);
@@ -132,37 +132,52 @@ public abstract class Message {
         public static final int BASE_Size = 5;
 
         int id;
+        byte[] publickey;
 
 
-        private ConnectionRequest(ByteBuffer buffer,int id){
+        private ConnectionRequest(ByteBuffer buffer,int id , byte[] publickey){
             super(Type.connectionRequest , buffer);
             this.id = id;
+            this.publickey = publickey;
 
         }
 
-        public static ConnectionRequest parse(ByteBuffer buffer){
+        public static ConnectionRequest parse(ByteBuffer buffer ,  int messageLength){
 
-            return  new ConnectionRequest(buffer , buffer.getInt());
+            int id = buffer.getInt();
+            byte[] publickey = new byte[messageLength - ConnectionRequest.BASE_Size];
+            buffer.get(publickey , 0 , publickey.length);
+
+            return  new ConnectionRequest(buffer , id , publickey);
 
 
         }
 
-        public static ByteBuffer  craft(int id){
+        public static ByteBuffer  craft(int id , byte[] publickey){
 
-            ByteBuffer buffer = ByteBuffer.allocate(MESSAGE_LENGTH_FIELD_SIZE + ConnectionRequest.BASE_Size);
-            buffer.putInt(ConnectionRequest.BASE_Size);
+            ByteBuffer buffer = ByteBuffer.allocate(MESSAGE_LENGTH_FIELD_SIZE + ConnectionRequest.BASE_Size + publickey.length);
+            buffer.putInt(ConnectionRequest.BASE_Size + publickey.length);
             buffer.put(Type.connectionRequest.getTypeByte());
             buffer.putInt(id); //add ID
+            buffer.put(publickey , 0 , publickey.length);
             buffer.flip();
 
             return buffer;
         }
 
 
+
+
         public int getId(){
 
             return this.id;
         }
+
+        public byte[] getPublicKey(){
+
+            return this.publickey;
+        }
+
     }
 
 

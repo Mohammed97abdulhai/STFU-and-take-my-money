@@ -8,9 +8,7 @@ import javax.crypto.NoSuchPaddingException;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import javax.management.openmbean.InvalidKeyException;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
+import java.security.*;
 
 public class Symmetric {
 
@@ -127,6 +125,40 @@ public class Symmetric {
         return null;
 
     }
+
+
+    public static byte[] sign(byte[] message , PrivateKey privateKey) throws NoSuchAlgorithmException, java.security.InvalidKeyException, SignatureException {
+
+
+        Signature signatureInstance = Signature.getInstance("SHA256withRSA");
+        signatureInstance.initSign(privateKey);
+        signatureInstance.update(message);
+
+
+        byte[] signature = signatureInstance.sign();
+
+        return signature;
+
+    }
+
+
+    public  static boolean verify(byte[] message , byte[] signature , PublicKey key) throws NoSuchAlgorithmException, java.security.InvalidKeyException, SignatureException {
+
+        Signature signatureInstance = Signature.getInstance("SHA256withRSA");
+        signatureInstance.initVerify(key);
+        signatureInstance.update(message);
+
+
+        return signatureInstance.verify(signature);
+
+    }
+
+
+
+
+
+
+
 }
 
   /*  class ASymmetric implements Cryptography{
