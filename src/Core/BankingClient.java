@@ -1,15 +1,12 @@
 package Core;
 
 import Core.crypto.Asymmetric;
+import Core.crypto.DigitalSignature;
 import Core.crypto.Symmetric;
 import messages.Message;
 
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
@@ -22,9 +19,6 @@ import java.util.Scanner;
 import static util.Util.constructString;
 
 public class BankingClient {
-
-
-
 
     public static void main(String[] args) throws IOException, NoSuchAlgorithmException, ParseException, InvalidKeySpecException, SignatureException, InvalidKeyException {
 
@@ -66,7 +60,7 @@ public class BankingClient {
 
         Scanner scanner = new Scanner(System.in);
 
-        ByteBuffer readbuff  = ByteBuffer.allocate(1024);
+        ByteBuffer readbuff = ByteBuffer.allocate(1024);
 
         while(!closed) {
 
@@ -75,14 +69,10 @@ public class BankingClient {
 
             switch (choice){
 
-
                 case 1:
-
-
                     Message.ConnectionResponse handshake = null;
 
                     //1) handle connection request and response
-
                     do {
 
                         //ask for an id
@@ -119,13 +109,7 @@ public class BankingClient {
                     }while(handshake.getFlag() == 1);
 
 
-
-
-
-
                     //2) transfer request and response
-
-
                     Message.TransactionResponse transactionResponse = null;
 
                     do {
@@ -154,7 +138,7 @@ public class BankingClient {
 
                         // get the message and the signature
                         byte[] message = Sendbuff.array();
-                        byte[] signature= Symmetric.sign(message , privateKey);
+                        byte[] signature= DigitalSignature.sign(message , privateKey);
 
 
 
@@ -247,6 +231,5 @@ public class BankingClient {
 
         socketChannel.close();
     }
-
 
 }

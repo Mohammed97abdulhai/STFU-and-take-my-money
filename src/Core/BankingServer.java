@@ -2,32 +2,29 @@ package Core;
 
 
 import Core.crypto.Asymmetric;
+import Core.crypto.DigitalCertificate;
+import Core.crypto.DigitalSignature;
 import Core.crypto.Symmetric;
 import com.opencsv.bean.CsvToBeanBuilder;
 import messages.Message;
 import models.ClientModel;
+import util.KeyStorage;
 import util.Util;
 
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.FileReader;
+import java.io.*;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
-import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.X509EncodedKeySpec;
 import java.text.ParseException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -36,10 +33,13 @@ import java.util.concurrent.Executors;
 public class BankingServer implements  Runnable{
 
     private int port = 5000;
-    private   boolean isStopped = false;
+    private boolean stopped = false;
+
+    public static PublicKey publicKey;
+    private static PrivateKey privateKey;
 
     private ServerSocketChannel serverSocketChannel;
-    private   ExecutorService threadPool;
+    private ExecutorService threadPool;
     List<ClientModel> clients;
     Map<Integer , ClientModel> clientMap = new HashMap<>();
 
@@ -52,8 +52,29 @@ public class BankingServer implements  Runnable{
             clientMap.put(client.getID() ,client);
         }
 
-        //ClientModel model = clientMap.get(1);
-        //System.out.println(model);
+        publicKey = KeyStorage.loadPublicKey("ServerPublicKey");
+        privateKey = KeyStorage.loadPrivateKey("ServerPrivateKey");
+
+        //If no existing keys are found, generate new key pair
+        if(publicKey == null || privateKey == null){
+            System.out.println("Server Keys not found... Generating new key pair");
+            try{
+                KeyPairGenerator keygen = KeyPairGenerator.getInstance("RSA");
+                keygen.initialize(1024);
+                KeyPair keyPair = keygen.generateKeyPair();
+                publicKey = keyPair.getPublic();
+                privateKey = keyPair.getPrivate();
+
+                KeyStorage.saveKey(publicKey, "ServerPublicKey");
+                KeyStorage.saveKey(privateKey, "ServerPrivateKey");
+                System.out.println("Saved new key pair...");
+            } catch (NoSuchAlgorithmException e) {
+                e.printStackTrace();
+            }
+        }
+        else{
+            System.out.println("Loaded existing Server keys");
+        }
 
 
         this.port = port;
@@ -66,46 +87,110 @@ public class BankingServer implements  Runnable{
     @Override
     public void run() {
 
-        try {
-            this.serverSocketChannel = ServerSocketChannel.open();
-            this.serverSocketChannel.bind(new InetSocketAddress(this.port));
+        Scanner scan = new Scanner(System.in);
+        System.out.println("1 - Start Banking Server");
+        System.out.println("2 - Acquire New Certificate");
+        int choice = scan.nextInt();
 
-        } catch(IOException e){
-            throw new RuntimeException("Cannot open port " + this.port , e);
-        }
-
-        while (!isStopped()) {
-            SocketChannel socketChannel;
+        if(choice == 1){
             try {
+                this.serverSocketChannel = ServerSocketChannel.open();
+                this.serverSocketChannel.bind(new InetSocketAddress(this.port));
 
-                socketChannel = this.serverSocketChannel.accept();//blocking
-
-            } catch (IOException e) {
-                if (isStopped()) {
-                    System.out.println("server is stopped u idiot");
-                    break;
-                }
-                throw new RuntimeException("Error accepting client connection ", e);
-
+            } catch(IOException e){
+                throw new RuntimeException("Cannot open port " + this.port , e);
             }
 
-            this.threadPool.execute(new Banker(socketChannel));
-        }
-        this.threadPool.shutdownNow();
-        System.out.println("BankingServer Stopped");
-    }
+            while (!isStopped()) {
+                SocketChannel socketChannel;
+                try {
 
+                    socketChannel = this.serverSocketChannel.accept();//blocking
+
+                } catch (IOException e) {
+                    if (isStopped()) {
+                        System.out.println("server is stopped u idiot");
+                        break;
+                    }
+                    throw new RuntimeException("Error accepting client connection ", e);
+
+                }
+
+                this.threadPool.execute(new Banker(socketChannel));
+            }
+            this.threadPool.shutdownNow();
+            System.out.println("BankingServer Stopped");
+        }
+
+        else if (choice == 2){
+
+            try{
+                SocketChannel socketChannel = SocketChannel.open();
+                socketChannel.connect(new InetSocketAddress("127.0.0.1", 15000));
+                socketChannel.configureBlocking(true);
+
+                System.out.println("Connected : " + socketChannel.toString());
+
+                ByteBuffer readbuff = ByteBuffer.allocate(1024);
+
+
+                //Create a certificate signing request
+                ByteBuffer writebuff = Message.CertSignRequest.craft("GullAndBullFinance", BankingServer.publicKey);
+
+                //Send the CSR
+                System.out.println("Sending CSR");
+                socketChannel.write(writebuff);
+
+                //Accept a Response
+                System.out.println("Waiting for certificate Response");
+                socketChannel.read(readbuff);
+                System.out.println("Certificate Response Received");
+                readbuff.flip();
+
+                //Parse the response message
+                Message.CertResponse response = (Message.CertResponse)Message.parse(readbuff);
+
+                //Check if the certificate was signed
+                if(response.getFlag() == 0){
+                    //Store the certificate
+                    response.getCertificate();
+
+                    File certFile = new File("ServerCertificate");
+                    if(!certFile.exists() || certFile.isDirectory()){
+                        certFile.createNewFile();
+                    }
+                    else{
+                        certFile.delete();
+                        certFile.createNewFile();
+                    }
+                    FileOutputStream out = new FileOutputStream(certFile);
+                    out.write(DigitalCertificate.store(response.getCertificate()));
+                    out.close();
+                }
+                else{
+                    //pass
+                }
+
+            } catch (IOException e) {
+                System.out.println("Certificate Server seems to be offline");
+            } catch (ParseException e) {
+                e.printStackTrace();
+            }
+        }
+        else{
+            System.out.println("Invalid choice... closing");
+        }
+
+        this.stop();
+    }
 
 
     private synchronized boolean isStopped(){
-
-
-
-        return this.isStopped;
+        return stopped;
     }
 
     public synchronized void stop(){
-        this.isStopped = true;
+        stopped = true;
 
         try{
             this.serverSocketChannel.close();
@@ -115,22 +200,6 @@ public class BankingServer implements  Runnable{
         }
 
         saveDatabase();
-    }
-
-    private synchronized void handleMessage(Message msg , SocketChannel socketChannel){
-
-       /* switch(msg.getType()){
-
-            case connectionRequest:
-                ByteBuffer sendbuffer =
-
-
-
-
-
-
-        }*/
-
     }
 
     private void saveDatabase(){
@@ -179,7 +248,7 @@ public class BankingServer implements  Runnable{
 
         public Banker(SocketChannel socketChannel){
 
-            this.socketChannel= socketChannel;
+            this.socketChannel = socketChannel;
             this.connected = false;
 
             try {
@@ -210,9 +279,10 @@ public class BankingServer implements  Runnable{
                 System.out.println("Connected to " + socketChannel.toString());
 
                 this.socketChannel.configureBlocking(true);
+
                 ByteBuffer readbuff = ByteBuffer.allocate(1024);
 
-                Message.ConnectionRequest handshake= null;
+                Message.ConnectionRequest handshake = null;
 
 
                 //1) handle connection request and connection response
@@ -236,10 +306,7 @@ public class BankingServer implements  Runnable{
 
                         //read the publickey bytes and create a PublicKey object from it
 
-                        this.remotePublickey =
-                                KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(handshake.getPublicKey()));
-
-
+                        this.remotePublickey = Asymmetric.rebuildPublicKey(handshake.getPublicKey());
 
 
 
@@ -265,8 +332,6 @@ public class BankingServer implements  Runnable{
 
                 do{
 
-
-
                     socketChannel.read(readbuff);
                     readbuff.flip();
 
@@ -277,7 +342,6 @@ public class BankingServer implements  Runnable{
 
                     //decrypt it
                     byte[] sessionKey = Asymmetric.decrypt(encryptedSessionKey , this.privateKey);
-
 
 
 
@@ -309,7 +373,7 @@ public class BankingServer implements  Runnable{
                     transactionRequest = (Message.TransactionRequest)Message.parse(ByteBuffer.wrap(message));
 
 
-                   boolean verfied =  Symmetric.verify(message , signature , this.remotePublickey);
+                   boolean verfied =  DigitalSignature.verify(message , signature , this.remotePublickey);
 
                    if(verfied){
                        System.out.println("VERFIED");
@@ -344,53 +408,54 @@ public class BankingServer implements  Runnable{
                         writeBuff = Message.TransactionResponse.craft((byte)1 , Util.constructString("User : " + id + " does not exist"  , 256));
                     }
 
-
                     this.socketChannel.write(writeBuff);
                     readbuff.clear();
 
-
-                }while(!validTransaction);
-
+                } while(!validTransaction);
 
 
 
 
-
-            }
-            catch (IOException e){
+            } catch (IOException e){
                 System.out.println(e.getMessage());
-            }
-            catch (ParseException e){
-                System.out.println("Parse Error");
-                System.out.println(e.getMessage());
-            }
-            catch (BufferUnderflowException e){
+            } catch (ParseException e){
+                System.out.println("Parse Error" + e.getMessage());
+            } catch (BufferUnderflowException e){
                 System.out.println("Buffer Error caused by interruption");
-                //System.out.println(e.getMessage());
             } catch (NoSuchAlgorithmException e) {
                 e.printStackTrace();
-            } catch (InvalidKeySpecException e) {
-                e.printStackTrace();
-            } catch (InvalidKeyException e) {
-                e.printStackTrace();
-            } catch (SignatureException e) {
-                e.printStackTrace();
+            } catch (InvalidKeyException | SignatureException e) {
+                System.out.println("Signature Verification Failure");
             } finally {
-
-                try {socketChannel.close();
-
+                try {
+                    socketChannel.close();
+                    System.out.println("Closed: " + socketChannel);
                 } catch (IOException e){
-
                     System.out.println("Error closing Socket");
-
                 }
-
-                System.out.println("Closed: " + socketChannel);
-
             }
 
 
         }
+    }
+
+    public static void main(String[] args){
+        BankingServer server = null;
+        try {
+            server = new BankingServer(5000, 10);
+            new Thread(server).start();
+            while(!server.isStopped()){
+                Thread.sleep(5 * 1000);
+            }
+
+        } catch (InterruptedException e) {
+            server.stop();
+            System.out.println("Server Interrupted... closing...");
+        } catch (FileNotFoundException e) {
+            System.out.println("Server Cannot find database file... closing...");
+        }
+
+        System.out.println("Stopped Server...");
     }
 
 }

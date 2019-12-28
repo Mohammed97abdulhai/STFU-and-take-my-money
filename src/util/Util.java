@@ -6,7 +6,7 @@ public class Util {
 
     static public byte[] constructString(String string , int size){
 
-        byte[] message= new byte[size];
+        byte[] message = new byte[size];
 
         byte[] temp = string.getBytes(StandardCharsets.UTF_8);
 
@@ -15,8 +15,6 @@ public class Util {
         }
 
         return message;
-
     }
-
 
 }

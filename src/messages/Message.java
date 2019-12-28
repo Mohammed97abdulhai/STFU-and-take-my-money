@@ -1,24 +1,18 @@
 package messages;
 
+import Core.crypto.DigitalCertificate;
+import Core.crypto.Asymmetric;
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.security.Key;
-import java.security.KeyFactory;
-import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.X509EncodedKeySpec;
 import java.text.ParseException;
-import java.util.Base64;
 
 public abstract class Message {
 
-
     public  static final int MESSAGE_LENGTH_FIELD_SIZE = 4;
 
+    //Message Type Enumeration
     public enum Type{
 
         connectionRequest(1),
@@ -27,8 +21,9 @@ public abstract class Message {
         transferResponse( 4),
         balanceRequest(5),
         balanceResponse(6),
-        keyExchange(7);
-
+        keyExchange(7),
+        CertSignRequest(8),
+        CertResponse(9);
 
 
         private byte id;
@@ -56,18 +51,16 @@ public abstract class Message {
             return null;
         }
 
-    };
+    }
 
 
-    private  final Type type;
-    private  final ByteBuffer data;
+    private final Type type;
+    private final ByteBuffer data;
 
     private Message(Type type , ByteBuffer data){
-
         this.type = type;
         this.data = data;
         this.data.rewind();
-
     }
 
     public Type getType(){
@@ -76,7 +69,6 @@ public abstract class Message {
 
     public ByteBuffer getData(){
         return this.data.duplicate();
-
     }
 
     public String toString(){
@@ -84,7 +76,7 @@ public abstract class Message {
         return this.getType().name();
     }
 
-
+    //Master parse function
     public static Message parse(ByteBuffer buffer) throws ParseException{
 
         int length = buffer.getInt();
@@ -93,13 +85,13 @@ public abstract class Message {
         }
 
         else if (length != buffer.remaining()){
-            throw new ParseException("specified message size doesn't match the actual ",0);
+            throw new ParseException("specified message size doesn't match the actual ", 0);
         }
 
         Type type = Type.get(buffer.get());
 
         if (type == null){
-            throw new ParseException("Unknown message ID" , buffer.position()-1);
+            throw new ParseException("Unknown message ID" , buffer.position() - 1);
         }
 
         switch (type){
@@ -118,6 +110,12 @@ public abstract class Message {
             case keyExchange:
                 return KeyExchange.parse(buffer.slice());
 
+            case CertSignRequest:
+                return CertSignRequest.parse(buffer.slice(), length);
+
+            case CertResponse:
+                return CertResponse.parse(buffer.slice(), length);
+
             default:
                 throw new IllegalStateException("the message type isnt defined");
         }
@@ -125,7 +123,7 @@ public abstract class Message {
     }
 
 
-
+    //Message Classes
 
     public static class ConnectionRequest extends  Message{
 
@@ -179,9 +177,6 @@ public abstract class Message {
         }
 
     }
-
-
-
 
     public static class ConnectionResponse extends  Message{
 
@@ -270,8 +265,6 @@ public abstract class Message {
     }
 
 
-
-
     public static class TransactionRequest extends  Message{
 
         public static final int BASE_Size = 269;
@@ -284,7 +277,7 @@ public abstract class Message {
 
         byte[] message;
 
-        private TransactionRequest(ByteBuffer buffer,int id, byte [] message, double moneyAmount /*, byte[] bytesMessage*/){
+        private TransactionRequest(ByteBuffer buffer, int id, byte [] message, double moneyAmount /*, byte[] bytesMessage*/){
             super(Type.transferRequest , buffer);
             this.id = id;
             this.reason = message;
@@ -305,11 +298,11 @@ public abstract class Message {
            /* buffer.rewind();
             byte[] data = new byte[TransactionRequest.BASE_Size + TransactionRequest.MESSAGE_LENGTH_FIELD_SIZE];
             buffer.get(data , 0 , data.length);*/
-            return  new TransactionRequest(buffer , id,message,amount/* ,data*/);
+            return  new TransactionRequest(buffer, id, message, amount/* ,data*/);
 
         }
 
-        public static ByteBuffer  craft(int id, double moneyAmount, byte [] message){
+        public static ByteBuffer craft(int id, double moneyAmount, byte [] message){
 
             ByteBuffer buffer = ByteBuffer.allocate(MESSAGE_LENGTH_FIELD_SIZE + TransactionRequest.BASE_Size);
             buffer.putInt(TransactionRequest.BASE_Size);
@@ -372,7 +365,6 @@ public abstract class Message {
 
         public static ByteBuffer craft(byte flag, byte [] message)
         {
-
             ByteBuffer buffer = ByteBuffer.allocate(MESSAGE_LENGTH_FIELD_SIZE + TransactionResponse.BASE_Size);
             buffer.putInt(TransactionResponse.BASE_Size);
             buffer.put(Type.transferResponse.getTypeByte());
@@ -392,40 +384,117 @@ public abstract class Message {
         }
     }
 
- /*   public static class ConnectionRequest extends  Message{
 
-        private static final int BASE_Size = 5;
+    public static class CertSignRequest extends Message {
+        public static final int BASE_Size = 5;
 
-        int id;
+        int ownerLength;
+        byte[] owner;
+        byte[] publickey;
 
-
-        private ConnectionRequest(ByteBuffer buffer,int id){
-            super(Type.connectionRequest , buffer);
-            this.id = id;
-
+        private CertSignRequest(ByteBuffer data, byte[] owner, byte[] publickey){
+            super(Type.CertSignRequest, data);
+            this.ownerLength = owner.length;
+            this.owner = owner;
+            this.publickey = publickey;
         }
 
-        public static ConnectionRequest parse(ByteBuffer buffer){
+        public static CertSignRequest parse(ByteBuffer buffer, int messageLength){
+            int ownerLength = buffer.getInt();
 
-            return  new ConnectionRequest(buffer , buffer.getInt());
+            byte[] owner = new byte[ownerLength];
+            buffer.get(owner, 0, ownerLength);
 
+            byte[] publickey = new byte[buffer.remaining()];
+            buffer.get(publickey, 0, buffer.remaining());
 
+            return new CertSignRequest(buffer, owner, publickey);
         }
 
-        public static ByteBuffer  craft(int id){
+        public static ByteBuffer craft(String owner, PublicKey publickey){
+            byte[] ownerbytes = owner.getBytes(StandardCharsets.UTF_8);
+            byte[] pkeyBytes = publickey.getEncoded();
 
-            ByteBuffer buffer = ByteBuffer.allocate(MESSAGE_LENGTH_FIELD_SIZE + ConnectionRequest.BASE_Size);
-            buffer.putInt(ConnectionRequest.BASE_Size);
-            buffer.put(Type.connectionRequest.getTypeByte());
-            buffer.putInt(id); //add ID
+            ByteBuffer buffer = ByteBuffer.allocate(MESSAGE_LENGTH_FIELD_SIZE + BASE_Size + ownerbytes.length + pkeyBytes.length);
+            buffer.putInt(BASE_Size  + ownerbytes.length + pkeyBytes.length);
+            buffer.put(Type.CertSignRequest.getTypeByte());
+            buffer.putInt(ownerbytes.length);
+            buffer.put(ownerbytes);
+            buffer.put(pkeyBytes);
             buffer.flip();
+            return buffer;
+        }
+
+        public String getOwner(){
+            return new String(this.owner, StandardCharsets.UTF_8);
+        }
+
+        public PublicKey getPublicKey(){
+            return Asymmetric.rebuildPublicKey(this.publickey);
+        }
+
+    }
+
+    public static class CertResponse extends Message{
+        public static final int BASE_Size = 14;
+
+        byte flag;
+        DigitalCertificate certificate;
+
+        private CertResponse(ByteBuffer data, byte flag, byte[] owner, byte[] issuer, byte[] publickey, byte[] signature){
+            super(Type.CertResponse, data);
+            String ownerStr = new String(owner, StandardCharsets.UTF_8);
+            String issuerStr = new String(issuer, StandardCharsets.UTF_8);
+            PublicKey pkey = Asymmetric.rebuildPublicKey(publickey);
+            this.certificate = new DigitalCertificate(ownerStr, issuerStr, pkey, signature);
+        }
+
+        public static CertResponse parse(ByteBuffer buffer, int messageLength){
+            byte flag = buffer.get();
+
+            int ownerLength = buffer.getInt();
+            int issuerLength = buffer.getInt();
+            int publickeyLength = buffer.getInt();
+
+            byte[] owner = new byte[ownerLength];
+            buffer.get(owner, 0, ownerLength);
+
+            byte[] issuer = new byte[issuerLength];
+            buffer.get(issuer, 0, issuerLength);
+
+            byte[] publickey = new byte[publickeyLength];
+            buffer.get(publickey, 0, publickeyLength);
+
+            byte[] signature = new byte[buffer.remaining()];
+            buffer.get(signature, 0, buffer.remaining());
+
+            return new CertResponse(buffer, flag, owner, issuer, publickey, signature);
+        }
+
+        public static ByteBuffer craft(DigitalCertificate cert, byte flag){
+            ByteBuffer buffer = ByteBuffer.allocate(MESSAGE_LENGTH_FIELD_SIZE + BASE_Size + cert.getCertAndSignBytes().length);
+            buffer.putInt(BASE_Size + cert.getCertAndSignBytes().length);
+            buffer.put(Type.CertResponse.getTypeByte());
+            buffer.put(flag);
+            buffer.putInt(cert.getOwner().length());
+            buffer.putInt(cert.getIssuer().length());
+            buffer.putInt(cert.getPublicKey().getEncoded().length);
+            buffer.put(cert.getOwner().getBytes(StandardCharsets.UTF_8));
+            buffer.put(cert.getIssuer().getBytes(StandardCharsets.UTF_8));
+            buffer.put(cert.getPublicKey().getEncoded());
+            buffer.put(cert.getSignature());
 
             return buffer;
         }
 
+        public DigitalCertificate getCertificate(){
+            return this.certificate;
+        }
+
+        public byte getFlag(){
+            return this.flag;
+        }
 
     }
-
-*/
 
 }
