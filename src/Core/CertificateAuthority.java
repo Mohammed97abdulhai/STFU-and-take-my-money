@@ -9,6 +9,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.text.ParseException;
 import java.util.HashSet;
@@ -116,7 +117,7 @@ public class CertificateAuthority extends Server {
     private static synchronized void registerOwner(String owner){
         registeredOwners.add(owner);
         try{
-            FileOutputStream out = new FileOutputStream("CertificateOwners.txt");
+            FileOutputStream out = new FileOutputStream("CertificateOwners.txt", true);
             PrintStream printer = new PrintStream(out);
             printer.println(owner);
             printer.close();
@@ -157,7 +158,7 @@ public class CertificateAuthority extends Server {
                 ByteBuffer writebuff;
                 if(!registeredOwners.contains(csr.getOwner())){
                     DigitalCertificate.sign(cert, privateKey);
-                    //registerOwner(csr.getOwner());
+                    registerOwner(csr.getOwner());
                     writebuff = Message.CertResponse.craft(cert, (byte)0);
                 }
                 else{

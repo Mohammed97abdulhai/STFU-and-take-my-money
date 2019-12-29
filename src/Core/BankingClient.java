@@ -1,11 +1,14 @@
 package Core;
 
 import Core.crypto.Asymmetric;
+import Core.crypto.DigitalCertificate;
 import Core.crypto.DigitalSignature;
 import Core.crypto.Symmetric;
 import messages.Message;
+import util.KeyStorage;
 
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -41,10 +44,7 @@ public class BankingClient {
         // byte[] secretKey = null;
 
 
-        //opening a socket channel to the server at the specified port
-        SocketChannel socketChannel =   SocketChannel.open();
-        socketChannel.connect(new InetSocketAddress("127.0.0.1" , 5000));
-        socketChannel.configureBlocking(true);
+
 
 
         //generate public and private keys (should be stored using Keystore in a file and later retreived!)
@@ -62,7 +62,20 @@ public class BankingClient {
 
         ByteBuffer readbuff = ByteBuffer.allocate(1024);
 
+        SocketChannel socketChannel = null;
+
         while(!closed) {
+            //opening a socket channel to the server at the specified port
+            try{
+                socketChannel = SocketChannel.open();
+                socketChannel.connect(new InetSocketAddress("127.0.0.1" , 5000));
+                socketChannel.configureBlocking(true);
+            }
+            catch(ConnectException e){
+                System.out.println("Banking Server Seems to be offline...");
+                break;
+            }
+
 
             System.out.println("Enter Choice : \nTransfer(1)\nClose(2) ");
             choice = scanner.nextInt();
@@ -70,7 +83,9 @@ public class BankingClient {
             switch (choice){
 
                 case 1:
-                    Message.ConnectionResponse handshake = null;
+                    //Message.ConnectionResponse handshake = null;
+                    Message.CertResponse handshake = null;
+                    boolean validCertReceived = false;
 
                     //1) handle connection request and response
                     do {
@@ -83,30 +98,43 @@ public class BankingClient {
                         ByteBuffer sendBuff = Message.ConnectionRequest.craft(selfId, pukeyBytes);
                         socketChannel.write(sendBuff);
 
-                        //receive a connection response
+                        //receive a connection response (certificate)
                         socketChannel.read(readbuff);
                         readbuff.flip();
 
                         //parse the received message
-                        handshake = (Message.ConnectionResponse) Message.parse(readbuff);
+                        //handshake = (Message.ConnectionResponse) Message.parse(readbuff);
+                        handshake = (Message.CertResponse) Message.parse(readbuff);
 
 
                         //get an object from the public key bytes
                         if(handshake.getFlag() ==0){
-                            remotePublickey =
-                                    KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(handshake.getPublicKey()));
+                            PublicKey CAPublicKey = KeyStorage.loadPublicKey("CAPublicKey");
+
+                            if(DigitalCertificate.verify(handshake.getCertificate(), CAPublicKey, "GullAndBullFinance")) {
+                                //remotePublickey = KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(handshake.getPublicKey()));
+                                remotePublickey = handshake.getCertificate().getPublicKey();
+                                validCertReceived = true;
+                            }
+                            else{
+                                System.out.println("Invalid Certificate Received... closing connection...");
+                            }
+                        }
+                        else{
+                            System.out.println("Failed to establish connection to the server...");
                         }
 
-
+                        /*
                         //print the message
                         int lastIndex = handshake.getMessage().indexOf(0);
                         String responseMessage = handshake.getMessage().substring(0, lastIndex);
                         System.out.println(responseMessage);
+                        */
 
 
                         readbuff.clear();
 
-                    }while(handshake.getFlag() == 1);
+                    }while(handshake.getFlag() == 1 || !validCertReceived);
 
 
                     //2) transfer request and response
@@ -148,7 +176,6 @@ public class BankingClient {
                         byte[] key = new byte[16];
                         secureRandom.nextBytes(key);
 
-
                         byte[] encryptedKey = Asymmetric.encrypt(key , remotePublickey.getEncoded());
 
 
@@ -159,7 +186,7 @@ public class BankingClient {
 
                         byte[] messageWithSignatureEncrypted = Symmetric.encrypt(messageWithSignature , key , Symmetric.iv);
 
-                        System.out.println(messageWithSignatureEncrypted.length);
+                        //System.out.println(messageWithSignatureEncrypted.length);
 
                         //testing ends
 
@@ -190,10 +217,30 @@ public class BankingClient {
                         socketChannel.read(readbuff);
                         readbuff.flip();
 
+                        //Decrypt the transaction response with the session key
+                        byte[] encryptedResponse = new byte[readbuff.remaining()];
+                        readbuff.get(encryptedResponse, 0, readbuff.remaining());
 
+                        byte[] responseAndSignature = Symmetric.decrypt(encryptedResponse, key, Symmetric.iv);
+
+                        byte[] responseSignature = new byte[128];
+                        byte[] responseBytes = new byte[responseAndSignature.length - 128];
+
+                        System.arraycopy(responseAndSignature, 0, responseBytes, 0, responseBytes.length);
+                        System.arraycopy(responseAndSignature, responseBytes.length, responseSignature, 0, responseSignature.length);
 
                         //parse the received message
-                        transactionResponse = (Message.TransactionResponse) Message.parse(readbuff);
+                        transactionResponse = (Message.TransactionResponse) Message.parse(ByteBuffer.wrap(responseBytes));
+
+                        boolean verified = DigitalSignature.verify(responseBytes, responseSignature, remotePublickey);
+
+                        if(verified){
+                            System.out.println("Transaction Response Verified");
+                        }
+                        else{
+                            System.out.println("Transaction Response Invalid");
+                            break;
+                        }
 
                         //and print the message
                         int lastIndex = transactionResponse.getMessage().indexOf(0);
@@ -222,14 +269,13 @@ public class BankingClient {
             }
 
 
+
         }
 
-
-
-
-        System.out.println("finished Writing exiting....");
-
         socketChannel.close();
+
+        System.out.println("exiting....");
+
     }
 
 }

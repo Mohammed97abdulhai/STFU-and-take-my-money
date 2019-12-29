@@ -12,7 +12,6 @@ import util.KeyStorage;
 import util.Util;
 
 import java.io.*;
-import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
@@ -21,10 +20,7 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.text.ParseException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -32,18 +28,27 @@ import java.util.concurrent.Executors;
 
 public class BankingServer implements  Runnable{
 
-    private int port = 5000;
+    private int port;
     private boolean stopped = false;
 
     public static PublicKey publicKey;
     private static PrivateKey privateKey;
+
+    public static DigitalCertificate serverCertificate;
 
     private ServerSocketChannel serverSocketChannel;
     private ExecutorService threadPool;
     List<ClientModel> clients;
     Map<Integer , ClientModel> clientMap = new HashMap<>();
 
+    public static HashSet<String> transactionHistory;
+
     public BankingServer(int port , int numThreads) throws FileNotFoundException {
+
+        transactionHistory = new HashSet<>();
+        loadTransactionHistory();
+        System.out.println("Loaded Transaction History");
+
 
         clients = new CsvToBeanBuilder(new FileReader("src/text.csv")).withType(ClientModel.class).build().parse();
 
@@ -76,6 +81,9 @@ public class BankingServer implements  Runnable{
             System.out.println("Loaded existing Server keys");
         }
 
+        loadCertificate();
+        System.out.println("Loaded Server Certificate");
+
 
         this.port = port;
         this.threadPool = Executors.newFixedThreadPool(numThreads);
@@ -96,6 +104,7 @@ public class BankingServer implements  Runnable{
             try {
                 this.serverSocketChannel = ServerSocketChannel.open();
                 this.serverSocketChannel.bind(new InetSocketAddress(this.port));
+                System.out.println("Banking Server Started...");
 
             } catch(IOException e){
                 throw new RuntimeException("Cannot open port " + this.port , e);
@@ -143,6 +152,7 @@ public class BankingServer implements  Runnable{
 
                 //Accept a Response
                 System.out.println("Waiting for certificate Response");
+
                 socketChannel.read(readbuff);
                 System.out.println("Certificate Response Received");
                 readbuff.flip();
@@ -166,9 +176,11 @@ public class BankingServer implements  Runnable{
                     FileOutputStream out = new FileOutputStream(certFile);
                     out.write(DigitalCertificate.store(response.getCertificate()));
                     out.close();
+
+                    System.out.println("Saved new certificate...");
                 }
                 else{
-                    //pass
+                    System.out.println("Certificate Signing Refused");
                 }
 
             } catch (IOException e) {
@@ -176,6 +188,8 @@ public class BankingServer implements  Runnable{
             } catch (ParseException e) {
                 e.printStackTrace();
             }
+
+
         }
         else{
             System.out.println("Invalid choice... closing");
@@ -193,7 +207,9 @@ public class BankingServer implements  Runnable{
         stopped = true;
 
         try{
-            this.serverSocketChannel.close();
+            if(serverSocketChannel != null){
+                serverSocketChannel.close();
+            }
 
         } catch (IOException e){
             throw new RuntimeException("Error closing server" , e);
@@ -202,8 +218,9 @@ public class BankingServer implements  Runnable{
         saveDatabase();
     }
 
+
+
     private void saveDatabase(){
-        System.out.println("Something happen?");
         try {
             FileOutputStream out = new FileOutputStream("src/text.csv");
 
@@ -214,6 +231,7 @@ public class BankingServer implements  Runnable{
                 out.write(line.getBytes(StandardCharsets.UTF_8));
             }
 
+            System.out.println("Database Saved...");
         } catch (FileNotFoundException e) {
             System.out.println("Cannot find save file");
             e.printStackTrace();
@@ -223,7 +241,72 @@ public class BankingServer implements  Runnable{
         }
     }
 
+    private void loadCertificate(){
 
+        File certFile = new File("ServerCertificate");
+        BankingServer.serverCertificate = null;
+
+        if(certFile.exists() && !certFile.isDirectory()){
+            try {
+                FileInputStream in = new FileInputStream(certFile);
+                byte[] buff = new byte[(int) certFile.length()];
+                in.read(buff, 0, (int)certFile.length());
+
+                DigitalCertificate loadedCert = DigitalCertificate.load(buff);
+
+                PublicKey CAPublicKey = KeyStorage.loadPublicKey("CAPublicKey");
+
+                if(DigitalCertificate.verify(loadedCert, CAPublicKey, "GullAndBullFinance")){
+                    BankingServer.serverCertificate = loadedCert;
+                }
+
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void loadTransactionHistory(){
+        File transactionsFile = new File("TransactionHistory.txt");
+        if(transactionsFile.exists() && !transactionsFile.isDirectory()){
+            try{
+                FileInputStream in = new FileInputStream(transactionsFile);
+                byte[] buff = new byte[16];
+                while(in.available() > 0){
+                    in.read(buff, 0, 16);
+                    String entry = new String(buff, StandardCharsets.UTF_8);
+                    transactionHistory.add(entry);
+                }
+
+                in.close();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        else{
+            try {
+                transactionsFile.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private static synchronized void saveTransaction(byte[] transactionId){
+        String transactionString = new String(transactionId, StandardCharsets.UTF_8);
+        transactionHistory.add(transactionString);
+        try{
+            FileOutputStream out = new FileOutputStream("TransactionHistory.txt", true);
+            out.write(transactionId);
+            out.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
     private class Banker implements Runnable{
 
@@ -251,6 +334,7 @@ public class BankingServer implements  Runnable{
             this.socketChannel = socketChannel;
             this.connected = false;
 
+            /*
             try {
                 KeyPairGenerator keygen = KeyPairGenerator.getInstance("RSA");
                 keygen.initialize(1024);
@@ -264,6 +348,12 @@ public class BankingServer implements  Runnable{
             } catch (NoSuchAlgorithmException e) {
                 e.printStackTrace();
             }
+            */
+
+            this.publicKey = BankingServer.publicKey;
+            this.privateKey = BankingServer.privateKey;
+
+            this.pkeyBytes = this.publicKey.getEncoded();
 
             if(symmetricOnly){
                 this.secretKey = Symmetric.key;
@@ -310,10 +400,12 @@ public class BankingServer implements  Runnable{
 
 
 
-                        writeBuff = Message.ConnectionResponse.craft((byte)0, Util.constructString("Successfully established connection to user " + id, 256), pkeyBytes);
+                        //writeBuff = Message.ConnectionResponse.craft((byte)0, Util.constructString("Successfully established connection to user " + id, 256), pkeyBytes);
+                        writeBuff = Message.CertResponse.craft(BankingServer.serverCertificate, (byte)0);
                     }
                     else{
-                        writeBuff = Message.ConnectionResponse.craft((byte)1, Util.constructString("failed to establish connection to user " + id, 256), pkeyBytes);
+                        //writeBuff = Message.ConnectionResponse.craft((byte)1, Util.constructString("failed to establish connection to user " + id, 256), pkeyBytes);
+                        writeBuff = Message.CertResponse.craft(BankingServer.serverCertificate, (byte)1);
                     }
 
                     this.socketChannel.write(writeBuff);
@@ -376,7 +468,11 @@ public class BankingServer implements  Runnable{
                    boolean verfied =  DigitalSignature.verify(message , signature , this.remotePublickey);
 
                    if(verfied){
-                       System.out.println("VERFIED");
+                       System.out.println("Transaction Request Verified");
+                   }
+                   else{
+                       System.out.println("Transaction Request Invalid");
+                       break;
                    }
 
                     ByteBuffer writeBuff = null;
@@ -393,14 +489,22 @@ public class BankingServer implements  Runnable{
                         ClientModel receiver = clientMap.get(id);
                         double receiverBalance = receiver.getBalance();
 
-                        if(currentBalance > amount) {
-                            writeBuff = Message.TransactionResponse.craft((byte)0 , Util.constructString("Transaction successful. new balance : " + (currentBalance - amount) , 256));
-                            clientMap.get(userId).setBalance(String.valueOf(currentBalance - amount));
-                            clientMap.get(id).setBalance(String.valueOf(receiverBalance + amount));
-                            validTransaction = true;
+                        if(!transactionHistory.contains(new String(sessionKey, StandardCharsets.UTF_8))) {
+                            if(currentBalance > amount) {
+                                writeBuff = Message.TransactionResponse.craft((byte)0 , Util.constructString("Transaction successful. new balance : " + (currentBalance - amount) , 256));
+                                clientMap.get(userId).setBalance(String.valueOf(currentBalance - amount));
+                                clientMap.get(id).setBalance(String.valueOf(receiverBalance + amount));
+                                validTransaction = true;
+
+                                //save unique request id
+                                saveTransaction(sessionKey);
+                            }
+                            else{
+                                writeBuff = Message.TransactionResponse.craft((byte)1 , Util.constructString("Insufficient funds" , 256));
+                            }
                         }
                         else{
-                            writeBuff = Message.TransactionResponse.craft((byte)1 , Util.constructString("Insufficient funds" , 256));
+                            writeBuff = Message.TransactionResponse.craft((byte)1 , Util.constructString("Transaction has been performed before... please perform a transaction with a new identifier" , 256));
                         }
 
                     }
@@ -408,7 +512,20 @@ public class BankingServer implements  Runnable{
                         writeBuff = Message.TransactionResponse.craft((byte)1 , Util.constructString("User : " + id + " does not exist"  , 256));
                     }
 
-                    this.socketChannel.write(writeBuff);
+                    //encrypt the response with the session key
+                    byte[] responseBytes = new byte[writeBuff.remaining()];
+                    writeBuff.get(responseBytes, 0, writeBuff.remaining());
+
+                    //add signature
+                    byte[] responseSignature = DigitalSignature.sign(responseBytes, this.privateKey);
+
+                    byte[] responseAndSignature = new byte[responseBytes.length + responseSignature.length];
+                    System.arraycopy(responseBytes, 0, responseAndSignature, 0, responseBytes.length);
+                    System.arraycopy(responseSignature, 0, responseAndSignature, responseBytes.length, responseSignature.length);
+
+                    byte[] encryptedResponse = Symmetric.encrypt(responseAndSignature, sessionKey, Symmetric.iv);
+
+                    this.socketChannel.write(ByteBuffer.wrap(encryptedResponse));
                     readbuff.clear();
 
                 } while(!validTransaction);

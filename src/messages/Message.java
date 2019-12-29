@@ -483,6 +483,7 @@ public abstract class Message {
             buffer.put(cert.getIssuer().getBytes(StandardCharsets.UTF_8));
             buffer.put(cert.getPublicKey().getEncoded());
             buffer.put(cert.getSignature());
+            buffer.flip();
 
             return buffer;
         }
