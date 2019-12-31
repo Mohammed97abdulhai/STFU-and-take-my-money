@@ -497,6 +497,8 @@ public class BankingServer implements  Runnable{
                                 validTransaction = true;
 
                                 //save unique request id
+
+                                saveDatabase();
                                 saveTransaction(sessionKey);
                             }
                             else{
